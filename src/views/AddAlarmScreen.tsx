@@ -6,9 +6,9 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
-  SafeAreaView,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context'; 
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RNAlarmModule from 'react-native-alarmageddon';

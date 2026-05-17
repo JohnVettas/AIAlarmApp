@@ -59,6 +59,27 @@ react {
  */
 def enableProguardInReleaseBuilds = false
 
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        
+        maven { 
+            url "https://jcenter.bintray.com"
+            allowInsecureProtocol = false 
+        }
+    }
+}
+
+// ... rest of your original android/build.gradle code (plugins, ext variables, etc)
+
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
  *
