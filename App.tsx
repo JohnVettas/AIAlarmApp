@@ -17,24 +17,37 @@ interface ActiveAlarmState {
   script: string;
 }
 
-function App(): React.JSX.Element {
+function App() {
   const [activeAlarm, setActiveAlarm] = useState<ActiveAlarmState | null>(null);
 
   useEffect(() => {
-    const checkAlarms = async () => {
+    // checks if an alarm should be ringing right now
+    async function checkAlarms() {
       try {
-        const stored = await AsyncStorage.getItem(STORAGE_KEY);
-        if (!stored) return;
+        const storedAlarms = await AsyncStorage.getItem(STORAGE_KEY);
 
-        const alarms = JSON.parse(stored);
-        const currentTime = new Date().toLocaleTimeString([], {
+        if (!storedAlarms) {
+          return;
+        }
+
+        const alarmsList = JSON.parse(storedAlarms);
+
+        const now = new Date();
+        const datePart = now.toLocaleDateString([], {
+          month: 'short',
+          day: 'numeric',
+        });
+        const timePart = now.toLocaleTimeString([], {
           hour: '2-digit',
           minute: '2-digit',
         });
 
-        const triggeredAlarm = alarms.find(
-          (a: any) => a.isActive && a.time === currentTime,
-        );
+        const currentFormattedTime = datePart + ', ' + timePart;
+
+        // look through our alarms to see if one matches right now
+        const triggeredAlarm = alarmsList.find(function (alarm: any) {
+          return alarm.isActive && alarm.time === currentFormattedTime;
+        });
 
         if (triggeredAlarm) {
           setActiveAlarm({
@@ -46,21 +59,21 @@ function App(): React.JSX.Element {
       } catch (error) {
         console.error('Error checking alarms', error);
       }
-    };
+    }
 
-    // Run once on cold boot
+    // Run once on app start
     checkAlarms();
 
     const subscription = AppState.addEventListener(
       'change',
-      (nextAppState: AppStateStatus) => {
+      function (nextAppState) {
         if (nextAppState === 'active') {
           checkAlarms();
         }
       },
     );
 
-    return () => {
+    return function cleanup() {
       subscription.remove();
     };
   }, []);
@@ -83,12 +96,16 @@ function App(): React.JSX.Element {
         </Stack.Navigator>
       </NavigationContainer>
 
-      {activeAlarm && (
+      {/* show the ringing overlay if we have an active alarm */}
+      {activeAlarm !== null && (
         <RingingOverlay
           alarmId={activeAlarm.id}
           alarmTitle={activeAlarm.title}
           alarmScript={activeAlarm.script}
-          onDiscard={() => setActiveAlarm(null)}
+          onDiscard={function () {
+            // close the overlay
+            setActiveAlarm(null);
+          }}
         />
       )}
     </>

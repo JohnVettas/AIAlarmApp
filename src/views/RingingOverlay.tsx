@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, use } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -27,12 +27,11 @@ export default function RingingOverlay({
   alarmScript,
   onDiscard,
 }: Props) {
-  const [currentTime, setCurrentTime] = useState(
-    new Date().toLocaleTimeString(),
-  );
+  const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString());
 
   const isRinging = useRef(true);
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     try {
       RNAlarmModule.stopCurrentAlarm(alarmId);
@@ -47,27 +46,29 @@ export default function RingingOverlay({
 
     const textToRead = alarmScript || `Good morning! It is time to wake up.`;
 
-    //PLAY THE AI VOICE
+    // play the AI voice
     Tts.getInitStatus()
       .then(() => {
-        // Ignore the silent switch (so it reads even if phone is on vibrate)
+        // ignore the silent switch (so it reads even if phone is on vibrate)
         Tts.setIgnoreSilentSwitch('ignore');
 
-        Tts.setDefaultRate(0.5); // Speed of the voice
-        Tts.setDefaultPitch(1.0); // Pitch of the voice
+        Tts.setDefaultRate(0.5); // speed of the voice
+        Tts.setDefaultPitch(1.0); // pitch of the voice
 
         Tts.addEventListener('tts-finish', () => {
           if (isRinging.current) {
             loopTimeoutRef.current = setTimeout(() => {
-              if (isRinging.current) Tts.speak(textToRead);
+              if (isRinging.current) {
+                Tts.speak(textToRead);
+              }
             }, 4000);
           }
         });
 
-        //Starts talking
+        // starts talking
         Tts.speak(textToRead);
       })
-      .catch(err => {
+      .catch((err) => {
         console.error('TTS Initialization failed', err);
       });
 
@@ -82,22 +83,30 @@ export default function RingingOverlay({
 
   const handleDiscard = async () => {
     isRinging.current = false;
+    
     if (loopTimeoutRef.current) clearTimeout(loopTimeoutRef.current);
     Tts.removeAllListeners('tts-finish');
     Tts.stop();
 
     try {
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      
       if (stored) {
         const alarms = JSON.parse(stored);
-        const updatedAlarms = alarms.map((a: any) =>
-          a.id === alarmId ? { ...a, isActive: false } : a,
-        );
+        
+        const updatedAlarms = alarms.map((alarm: any) => {
+          if (alarm.id === alarmId) {
+            return { ...alarm, isActive: false };
+          }
+          return alarm;
+        });
+        
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedAlarms));
       }
-    } catch (e) {
-      console.error('Failed to update storage', e);
+    } catch (error) {
+      console.error('Failed to update storage', error);
     }
+    
     DeviceEventEmitter.emit('refreshAlarms');
     onDiscard();
   };

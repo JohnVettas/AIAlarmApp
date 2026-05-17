@@ -1,6 +1,4 @@
 import React, { useState } from 'react';
-import { generateAlarmScript } from '../services/aiService';
-import RNAlarmModule from 'react-native-alarmageddon';
 import {
   StyleSheet,
   Text,
@@ -9,27 +7,42 @@ import {
   TouchableOpacity,
   Alert,
   SafeAreaView,
-  ActivityIndicator, //loading feedback
+  ActivityIndicator,
 } from 'react-native';
-import DateTimePicker, {
-  DateTimePickerEvent,
-} from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import RNAlarmModule from 'react-native-alarmageddon';
+
+import { generateAlarmScript } from '../services/aiService';
 
 const STORAGE_KEY = '@ai_alarms_list';
 
 export default function AddAlarmScreen({ navigation }: any) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [date, setDate] = useState(new Date());
+  
+  const [date, setDate] = useState(new Date(Date.now() + 60000));
   const [isGenerating, setIsGenerating] = useState(false);
+  
   const [showPicker, setShowPicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState<'date' | 'time'>('time');
 
-  const onTimeChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+  const onDateTimeChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     setShowPicker(false);
+    
     if (selectedDate) {
       setDate(selectedDate);
     }
+  };
+
+  const showDatepicker = () => {
+    setPickerMode('date');
+    setShowPicker(true);
+  };
+
+  const showTimepicker = () => {
+    setPickerMode('time');
+    setShowPicker(true);
   };
 
   const handleSaveAlarm = async () => {
@@ -38,22 +51,25 @@ export default function AddAlarmScreen({ navigation }: any) {
       return;
     }
 
+    // prevent picking past times
+    if (date.getTime() <= Date.now()) {
+      Alert.alert(
+        'Time Travel Detected 🚀',
+        'You cannot set an alarm for the past. Please pick a future date and time.'
+      );
+      return;
+    }
+
     setIsGenerating(true);
 
     try {
       const generatedScript = await generateAlarmScript(title, description, date);
 
-      let scheduledDate = new Date();
-      scheduledDate.setHours(date.getHours(), date.getMinutes(), 0, 0);
-
-      if (scheduledDate.getTime() <= Date.now()) {
-        scheduledDate.setDate(scheduledDate.getDate() + 1);
-      }
+      const scheduledDate = new Date(date);
+      scheduledDate.setSeconds(0, 0);
 
       const tzOffset = scheduledDate.getTimezoneOffset() * 60000;
-      const localISOTime = new Date(scheduledDate.getTime() - tzOffset)
-        .toISOString()
-        .slice(0, -1);
+      const localISOTime = new Date(scheduledDate.getTime() - tzOffset).toISOString().slice(0, -1);
 
       const newId = Date.now().toString();
 
@@ -65,34 +81,36 @@ export default function AddAlarmScreen({ navigation }: any) {
         snoozeEnabled: true,
       });
 
-      const formattedTime = scheduledDate.toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+      const datePart = scheduledDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      const timePart = scheduledDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const formattedTime = `${datePart}, ${timePart}`;
+
       const newAlarm = {
         id: newId,
-        title,
-        description,
+        title: title,
+        description: description,
         script: generatedScript,
         time: formattedTime,
+        timestamp: scheduledDate.getTime(),
         isActive: true,
       };
 
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      const existingAlarms = stored ? JSON.parse(stored) : [];
-      await AsyncStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify([...existingAlarms, newAlarm]),
-      );
+      let existingAlarms = [];
+      
+      if (stored) {
+        existingAlarms = JSON.parse(stored);
+      }
+
+      const updatedAlarms = [...existingAlarms, newAlarm];
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedAlarms));
 
       setIsGenerating(false);
       navigation.goBack();
+      
     } catch (error) {
       console.error('Failed to set alarm', error);
-      Alert.alert(
-        'Error',
-        'Failed to generate alarm script. Check your internet.',
-      );
+      Alert.alert('Error', 'Failed to generate alarm script. Check your internet.');
       setIsGenerating(false);
     }
   };
@@ -108,6 +126,7 @@ export default function AddAlarmScreen({ navigation }: any) {
           onChangeText={setTitle}
           editable={!isGenerating}
         />
+        
         <TextInput
           style={[styles.input, styles.textArea]}
           placeholder="AI Speech Context Prompt..."
@@ -119,23 +138,37 @@ export default function AddAlarmScreen({ navigation }: any) {
         />
       </View>
 
-      <TouchableOpacity
-        style={styles.timeSelectorButton}
-        onPress={() => !isGenerating && setShowPicker(true)}
-        disabled={isGenerating}
-      >
-        <Text style={styles.timeLabelText}>Set Time:</Text>
-        <Text style={styles.timeValueText}>
-          {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </Text>
-      </TouchableOpacity>
+      <View style={styles.pickerContainer}>
+        <TouchableOpacity
+          style={styles.selectorButton}
+          onPress={showDatepicker}
+          disabled={isGenerating}
+        >
+          <Text style={styles.labelText}>Date:</Text>
+          <Text style={styles.valueText}>
+            {date.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.selectorButton}
+          onPress={showTimepicker}
+          disabled={isGenerating}
+        >
+          <Text style={styles.labelText}>Time:</Text>
+          <Text style={styles.valueText}>
+            {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {showPicker && (
         <DateTimePicker
           value={date}
-          mode="time"
+          mode={pickerMode}
           is24Hour={true}
-          onChange={onTimeChange}
+          minimumDate={new Date()}
+          onChange={onDateTimeChange}
         />
       )}
 
@@ -177,20 +210,23 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   textArea: { height: 90, textAlignVertical: 'top', marginBottom: 0 },
-  timeSelectorButton: {
-    height: 60,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
+  pickerContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#dee2e6',
     marginBottom: 30,
   },
-  timeLabelText: { color: '#495057', fontSize: 16, fontWeight: '600' },
-  timeValueText: { color: '#007bff', fontSize: 20, fontWeight: 'bold' },
+  selectorButton: {
+    flex: 0.48,
+    height: 65,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#dee2e6',
+  },
+  labelText: { color: '#495057', fontSize: 14, fontWeight: '600', marginBottom: 4 },
+  valueText: { color: '#007bff', fontSize: 16, fontWeight: 'bold' },
   button: {
     backgroundColor: '#007bff',
     borderRadius: 12,

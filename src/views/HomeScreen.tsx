@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
+import { AlarmItem } from '../types/alarm';
 import {
   StyleSheet,
   Text,
@@ -14,13 +15,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RNAlarmModule from 'react-native-alarmageddon';
 
-export interface AlarmItem {
-  id: string;
-  title: string;
-  description: string;
-  time: string;
-  isActive: boolean;
-}
+
 
 const STORAGE_KEY = '@ai_alarms_list';
 
@@ -33,27 +28,32 @@ export default function HomeScreen() {
       const loadAlarms = async () => {
         try {
           const stored = await AsyncStorage.getItem(STORAGE_KEY);
-          if (stored) setAlarms(JSON.parse(stored));
+          
+          if (stored) {
+            setAlarms(JSON.parse(stored));
+          }
         } catch (error) {
           console.error('Failed to load alarms', error);
         }
       };
+      
       loadAlarms();
-    }, []),
+    }, [])
   );
 
   useEffect(() => {
-    const subscription = DeviceEventEmitter.addListener(
-      'refreshAlarms',
-      async () => {
-        try {
-          const stored = await AsyncStorage.getItem(STORAGE_KEY);
-          if (stored) setAlarms(JSON.parse(stored)); // Instantly updates the visual toggle!
-        } catch (error) {
-          console.error('Failed to refresh alarms from broadcast', error);
+    // refresh list when triggered from other screens
+    const subscription = DeviceEventEmitter.addListener('refreshAlarms', async () => {
+      try {
+        const stored = await AsyncStorage.getItem(STORAGE_KEY);
+        
+        if (stored) {
+          setAlarms(JSON.parse(stored));
         }
-      },
-    );
+      } catch (error) {
+        console.error('Failed to refresh alarms from broadcast', error);
+      }
+    });
 
     return () => {
       subscription.remove();
@@ -67,31 +67,99 @@ export default function HomeScreen() {
       console.log('Failed to cancel native alarm', error);
     }
 
-    const updatedAlarms = alarms.filter(alarm => alarm.id !== id);
+    const updatedAlarms = alarms.filter((alarm) => alarm.id !== id);
     setAlarms(updatedAlarms);
+    
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedAlarms));
   };
 
   const toggleAlarm = async (id: string, currentlyActive: boolean) => {
+    const targetAlarm = alarms.find((a) => a.id === id);
+    
+    if (!targetAlarm) return;
+
     if (currentlyActive) {
+      // turning off the alarm
       try {
         RNAlarmModule.cancelAlarm(id);
-      } catch (error) {
-        console.log('Failed to cancel native alarm', error);
-      }
-    } else {
-      Alert.alert(
-        'Notice',
-        'To reactivate, please create a new alarm to ensure the time is set correctly.',
+      } catch (e) {}
+      
+      const updatedAlarms = alarms.map((a) => 
+        a.id === id ? { ...a, isActive: false } : a
       );
-      return;
-    }
+      
+      setAlarms(updatedAlarms);
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedAlarms));
+      
+    } else {
+      const originalDate = targetAlarm.timestamp ? new Date(targetAlarm.timestamp) : new Date();
+      const now = new Date();
 
-    const updatedAlarms = alarms.map(alarm =>
-      alarm.id === id ? { ...alarm, isActive: !alarm.isActive } : alarm,
-    );
-    setAlarms(updatedAlarms);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedAlarms));
+      if (originalDate > now && targetAlarm.timestamp) {
+        // turning on a future alarm
+        try {
+          const tzOffset = originalDate.getTimezoneOffset() * 60000;
+          const localISOTime = new Date(originalDate.getTime() - tzOffset).toISOString().slice(0, -1);
+          
+          await RNAlarmModule.scheduleAlarm({
+            id: targetAlarm.id,
+            datetimeISO: localISOTime,
+            title: targetAlarm.title,
+            body: 'Wake up!',
+            snoozeEnabled: true,
+          });
+        } catch (e) {}
+
+        const updatedAlarms = alarms.map((a) => 
+          a.id === id ? { ...a, isActive: true } : a
+        );
+        
+        setAlarms(updatedAlarms);
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedAlarms));
+
+      } else {
+        // alarm time has passed
+        Alert.alert('Time has passed', 'Turn it on for tomorrow same time?', [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'OK',
+            onPress: async () => {
+              const tomorrow = new Date();
+              tomorrow.setDate(tomorrow.getDate() + 1);
+              tomorrow.setHours(originalDate.getHours(), originalDate.getMinutes(), 0, 0);
+
+              try {
+                const tzOffset = tomorrow.getTimezoneOffset() * 60000;
+                const localISOTime = new Date(tomorrow.getTime() - tzOffset).toISOString().slice(0, -1);
+                
+                await RNAlarmModule.scheduleAlarm({
+                  id: targetAlarm.id,
+                  datetimeISO: localISOTime,
+                  title: targetAlarm.title,
+                  body: 'Wake up!',
+                  snoozeEnabled: true,
+                });
+              } catch (e) {}
+
+              const datePart = tomorrow.toLocaleDateString([], { month: 'short', day: 'numeric' });
+              const timePart = tomorrow.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+              const updatedAlarms = alarms.map((a) =>
+                a.id === id ? { 
+                  ...a, 
+                  isActive: true, 
+                  time: `${datePart}, ${timePart}`,
+                  timestamp: tomorrow.getTime() 
+                } : a
+              );
+              
+              setAlarms(updatedAlarms);
+              await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedAlarms));
+            },
+          },
+        ]);
+      }
+    }
   };
 
   const handleLongPress = (id: string, title: string) => {
@@ -108,9 +176,7 @@ export default function HomeScreen() {
       delayLongPress={500}
     >
       <View style={styles.alarmInfo}>
-        <Text
-          style={[styles.alarmTimeText, !item.isActive && styles.disabledText]}
-        >
+        <Text style={[styles.alarmTimeText, !item.isActive && styles.disabledText]}>
           {item.time}
         </Text>
         <Text style={styles.alarmTitleText}>{item.title}</Text>
@@ -130,7 +196,7 @@ export default function HomeScreen() {
       <FlatList
         data={alarms}
         renderItem={renderAlarmCard}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           <Text style={styles.emptyText}>No alarms scheduled yet.</Text>
