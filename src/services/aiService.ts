@@ -55,6 +55,6 @@ export async function generateAlarmScript(
     }
   } catch (error) {
     console.error('AI Generation Failed:', error);
-    return `Good morning! It is time to wake up for your alarm: ${title}.`;
+    return `It is time for your alarm: ${title}.`;
   }
 }

@@ -105,7 +105,7 @@ export default function HomeScreen() {
             id: targetAlarm.id,
             datetimeISO: localISOTime,
             title: targetAlarm.title,
-            body: 'Wake up!',
+            body: 'Ai Alarm: ' + targetAlarm.title,
             snoozeEnabled: true,
           });
         } catch (e) {}
@@ -136,7 +136,7 @@ export default function HomeScreen() {
                   id: targetAlarm.id,
                   datetimeISO: localISOTime,
                   title: targetAlarm.title,
-                  body: 'Wake up!',
+                  body: 'Ai Alarm: ' + targetAlarm.title,
                   snoozeEnabled: true,
                 });
               } catch (e) {}

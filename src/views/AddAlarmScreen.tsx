@@ -54,7 +54,7 @@ export default function AddAlarmScreen({ navigation }: any) {
     // prevent picking past times
     if (date.getTime() <= Date.now()) {
       Alert.alert(
-        'Time Travel Detected 🚀',
+        'Time Travel Detected',
         'You cannot set an alarm for the past. Please pick a future date and time.'
       );
       return;
@@ -77,7 +77,7 @@ export default function AddAlarmScreen({ navigation }: any) {
         id: newId,
         datetimeISO: localISOTime,
         title: title,
-        body: 'Wake up!',
+        body: 'Ai Alarm: ' + title,
         snoozeEnabled: true,
       });
 

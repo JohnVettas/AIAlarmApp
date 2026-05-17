@@ -44,7 +44,7 @@ export default function RingingOverlay({
       setCurrentTime(new Date().toLocaleTimeString());
     }, 1000);
 
-    const textToRead = alarmScript || `Good morning! It is time to wake up.`;
+    const textToRead = alarmScript || `It is time for your alarm: ${alarmTitle}.`;
 
     // play the AI voice
     Tts.getInitStatus()
