@@ -11,8 +11,8 @@ import {
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import notifee from '@notifee/react-native';
 
-//Data Contract
 export interface AlarmItem {
   id: string;
   title: string;
@@ -25,10 +25,8 @@ const STORAGE_KEY = '@ai_alarms_list';
 
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
-
   const [alarms, setAlarms] = useState<AlarmItem[]>([]);
 
-  //read async storage Runs every time this screen appears on the phone
   useFocusEffect(
     useCallback(() => {
       const loadAlarms = async () => {
@@ -43,22 +41,28 @@ export default function HomeScreen() {
     }, []),
   );
 
-  //delete alarm
   const deleteAlarm = async (id: string) => {
-    //redo data without the deleted one
-    const updatedAlarms = alarms.filter(alarm => alarm.id !== id);
+    await notifee.cancelNotification(id);
 
+    const updatedAlarms = alarms.filter(alarm => alarm.id !== id);
     setAlarms(updatedAlarms);
-    
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedAlarms));
   };
 
-  //toggle alarm on/off
-  const toggleAlarm = async (id: string) => {
+  const toggleAlarm = async (id: string, currentlyActive: boolean) => {
+    if (currentlyActive) {
+      await notifee.cancelNotification(id);
+    } else {
+      Alert.alert(
+        'Notice',
+        'To reactivate, please create a new alarm to ensure the time is set correctly.',
+      );
+      return;
+    }
+
     const updatedAlarms = alarms.map(alarm =>
       alarm.id === id ? { ...alarm, isActive: !alarm.isActive } : alarm,
     );
-
     setAlarms(updatedAlarms);
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedAlarms));
   };
@@ -87,7 +91,7 @@ export default function HomeScreen() {
       <Switch
         trackColor={{ false: '#767577', true: '#81b0ff' }}
         thumbColor={item.isActive ? '#007bff' : '#f4f3f4'}
-        onValueChange={() => toggleAlarm(item.id)}
+        onValueChange={() => toggleAlarm(item.id, item.isActive)}
         value={item.isActive}
       />
     </TouchableOpacity>
@@ -115,7 +119,6 @@ export default function HomeScreen() {
   );
 }
 
-//STYLES
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8f9fa', padding: 20 },
   helperText: {

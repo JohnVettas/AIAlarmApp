@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import RNAlarmModule from 'react-native-alarmageddon';
 import {
   StyleSheet,
   Text,
@@ -14,13 +15,18 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import notifee, {
+  TimestampTrigger,
+  TriggerType,
+  AndroidImportance,
+  AndroidCategory,
+} from '@notifee/react-native';
 import { AlarmItem } from './HomeScreen';
 
 const STORAGE_KEY = '@ai_alarms_list';
 
 export default function AddAlarmScreen() {
   const navigation = useNavigation();
-
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [date, setDate] = useState<Date>(new Date());
@@ -37,34 +43,62 @@ export default function AddAlarmScreen() {
       return;
     }
 
-    const formattedTime = date.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const now = new Date();
+    let scheduledDate = new Date();
 
-    //Create the new alarm object
-    const newAlarm: AlarmItem = {
-      id: Date.now().toString(),
-      title,
-      description,
-      time: formattedTime,
-      isActive: true,
-    };
+    scheduledDate.setHours(date.getHours(), date.getMinutes(), 0, 0);
+
+    if (scheduledDate.getTime() <= now.getTime()) {
+      scheduledDate.setDate(scheduledDate.getDate() + 1);
+    }
+
+    const tzOffset = scheduledDate.getTimezoneOffset() * 60000;
+    const localISOTime = new Date(scheduledDate.getTime() - tzOffset)
+      .toISOString()
+      .slice(0, -1);
+
+    const granted = await RNAlarmModule.ensurePermissions();
+    if (!granted) {
+      Alert.alert(
+        'Permission Denied',
+        'Please enable alarm permissions in your settings.',
+      );
+      return;
+    }
 
     try {
-      // Gets data already in storage and adds the new one
+      const newId = Date.now().toString();
+
+      await RNAlarmModule.scheduleAlarm({
+        id: newId,
+        datetimeISO: localISOTime,
+        title: title,
+        body: 'Wake up!',
+        snoozeEnabled: true,
+      });
+
+      const formattedTime = scheduledDate.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const newAlarm = {
+        id: newId,
+        title,
+        description,
+        time: formattedTime,
+        isActive: true,
+      };
+
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      const existingAlarms: AlarmItem[] = stored ? JSON.parse(stored) : [];
-
-      const updatedAlarms = [...existingAlarms, newAlarm];
-
-      //Save it to AsycStorage
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updatedAlarms));
+      const existingAlarms = stored ? JSON.parse(stored) : [];
+      await AsyncStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify([...existingAlarms, newAlarm]),
+      );
 
       navigation.goBack();
     } catch (error) {
-      console.error('Failed to save alarm directly to storage', error);
-      Alert.alert('Error', 'Could not save the alarm to disk.');
+      console.error('Failed to set alarm', error);
     }
   };
 
@@ -114,7 +148,6 @@ export default function AddAlarmScreen() {
   );
 }
 
-//STYLES
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8f9fa', padding: 20 },
   card: {
