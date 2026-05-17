@@ -4,6 +4,7 @@ import { GROQ_API_KEY } from '@env';
 export async function generateAlarmScript(
   title: string,
   description: string,
+  time: Date,
 ): Promise<string> {
   try {
     if (!GROQ_API_KEY) {
@@ -24,19 +25,21 @@ export async function generateAlarmScript(
             {
               role: 'system',
               content: `You are an energetic, friendly AI morning alarm assistant. 
-            Your job is to write a short paragraph (2-3 sentences max) to wake the user up. 
+            Your job is to write a short paragraph (2-3 sentences max) to notify the user of the activity they have planned. 
             It must be written explicitly to be read aloud by a text-to-speech engine. 
-            Do not include emojis, markdown, or text layout formatting.`,
+            Do not include emojis, markdown, or text layout formatting
+            Also do not add any extra information that is not mentioned in the description.
+            Alway start the paragraph with "It's (day of the week), (time)." and then mention the planned activity.`,
             },
             {
               role: 'user',
               content: `Alarm Title: ${title}\nUser Context Prompt: ${
-                description || 'Just a normal morning wake up.'
-              }`,
+                description || 'No description provided.'
+              }\nScheduled Time: ${time.toLocaleString()}`,
             },
           ],
           max_tokens: 150,
-          temperature: 0.7,
+          temperature: 0.5,
         }),
       },
     );

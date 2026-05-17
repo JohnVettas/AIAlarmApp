@@ -41,7 +41,7 @@ export default function AddAlarmScreen({ navigation }: any) {
     setIsGenerating(true);
 
     try {
-      const generatedScript = await generateAlarmScript(title, description);
+      const generatedScript = await generateAlarmScript(title, description, date);
 
       let scheduledDate = new Date();
       scheduledDate.setHours(date.getHours(), date.getMinutes(), 0, 0);

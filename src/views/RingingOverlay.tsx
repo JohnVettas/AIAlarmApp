@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, use } from 'react';
 import {
   StyleSheet,
   Text,
@@ -30,6 +30,8 @@ export default function RingingOverlay({
     new Date().toLocaleTimeString(),
   );
 
+  const isRinging = useRef(true);
+  const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     try {
       RNAlarmModule.stopCurrentAlarm(alarmId);
@@ -42,6 +44,8 @@ export default function RingingOverlay({
       setCurrentTime(new Date().toLocaleTimeString());
     }, 1000);
 
+    const textToRead = alarmScript || `Good morning! It is time to wake up.`;
+
     //PLAY THE AI VOICE
     Tts.getInitStatus()
       .then(() => {
@@ -51,20 +55,34 @@ export default function RingingOverlay({
         Tts.setDefaultRate(0.5); // Speed of the voice
         Tts.setDefaultPitch(1.0); // Pitch of the voice
 
+        Tts.addEventListener('tts-finish', () => {
+          if (isRinging.current) {
+            loopTimeoutRef.current = setTimeout(() => {
+              if (isRinging.current) Tts.speak(textToRead);
+            }, 2000);
+          }
+        });
+
         //Starts talking
-        Tts.speak(alarmScript || 'Good morning! It is time to wake up.');
+        Tts.speak(textToRead);
       })
       .catch(err => {
         console.error('TTS Initialization failed', err);
       });
 
     return () => {
+      isRinging.current = false;
       clearInterval(timer);
+      if (loopTimeoutRef.current) clearTimeout(loopTimeoutRef.current);
+      Tts.removeAllListeners('tts-finish');
       Tts.stop(); 
     };
   }, [alarmId, alarmScript]);
 
   const handleDiscard = async () => {
+    isRinging.current = false;
+    if (loopTimeoutRef.current) clearTimeout(loopTimeoutRef.current);
+    Tts.removeAllListeners('tts-finish');
     Tts.stop();
 
     try {
