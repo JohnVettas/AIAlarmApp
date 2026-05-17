@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { generateAlarmScript } from '../services/aiService';
 import RNAlarmModule from 'react-native-alarmageddon';
 import {
   StyleSheet,
@@ -8,33 +9,27 @@ import {
   TouchableOpacity,
   Alert,
   SafeAreaView,
-  Platform,
+  ActivityIndicator, //loading feedback
 } from 'react-native';
 import DateTimePicker, {
   DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
-import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import notifee, {
-  TimestampTrigger,
-  TriggerType,
-  AndroidImportance,
-  AndroidCategory,
-} from '@notifee/react-native';
-import { AlarmItem } from './HomeScreen';
 
 const STORAGE_KEY = '@ai_alarms_list';
 
-export default function AddAlarmScreen() {
-  const navigation = useNavigation();
+export default function AddAlarmScreen({ navigation }: any) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [date, setDate] = useState<Date>(new Date());
-  const [showPicker, setShowPicker] = useState<boolean>(false);
+  const [date, setDate] = useState(new Date());
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
 
   const onTimeChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === 'android') setShowPicker(false);
-    if (selectedDate) setDate(selectedDate);
+    setShowPicker(false);
+    if (selectedDate) {
+      setDate(selectedDate);
+    }
   };
 
   const handleSaveAlarm = async () => {
@@ -43,30 +38,23 @@ export default function AddAlarmScreen() {
       return;
     }
 
-    const now = new Date();
-    let scheduledDate = new Date();
-
-    scheduledDate.setHours(date.getHours(), date.getMinutes(), 0, 0);
-
-    if (scheduledDate.getTime() <= now.getTime()) {
-      scheduledDate.setDate(scheduledDate.getDate() + 1);
-    }
-
-    const tzOffset = scheduledDate.getTimezoneOffset() * 60000;
-    const localISOTime = new Date(scheduledDate.getTime() - tzOffset)
-      .toISOString()
-      .slice(0, -1);
-
-    const granted = await RNAlarmModule.ensurePermissions();
-    if (!granted) {
-      Alert.alert(
-        'Permission Denied',
-        'Please enable alarm permissions in your settings.',
-      );
-      return;
-    }
+    setIsGenerating(true);
 
     try {
+      const generatedScript = await generateAlarmScript(title, description);
+
+      let scheduledDate = new Date();
+      scheduledDate.setHours(date.getHours(), date.getMinutes(), 0, 0);
+
+      if (scheduledDate.getTime() <= Date.now()) {
+        scheduledDate.setDate(scheduledDate.getDate() + 1);
+      }
+
+      const tzOffset = scheduledDate.getTimezoneOffset() * 60000;
+      const localISOTime = new Date(scheduledDate.getTime() - tzOffset)
+        .toISOString()
+        .slice(0, -1);
+
       const newId = Date.now().toString();
 
       await RNAlarmModule.scheduleAlarm({
@@ -85,6 +73,7 @@ export default function AddAlarmScreen() {
         id: newId,
         title,
         description,
+        script: generatedScript,
         time: formattedTime,
         isActive: true,
       };
@@ -96,9 +85,15 @@ export default function AddAlarmScreen() {
         JSON.stringify([...existingAlarms, newAlarm]),
       );
 
+      setIsGenerating(false);
       navigation.goBack();
     } catch (error) {
       console.error('Failed to set alarm', error);
+      Alert.alert(
+        'Error',
+        'Failed to generate alarm script. Check your internet.',
+      );
+      setIsGenerating(false);
     }
   };
 
@@ -111,6 +106,7 @@ export default function AddAlarmScreen() {
           placeholderTextColor="#888"
           value={title}
           onChangeText={setTitle}
+          editable={!isGenerating}
         />
         <TextInput
           style={[styles.input, styles.textArea]}
@@ -119,12 +115,14 @@ export default function AddAlarmScreen() {
           multiline={true}
           value={description}
           onChangeText={setDescription}
+          editable={!isGenerating}
         />
       </View>
 
       <TouchableOpacity
         style={styles.timeSelectorButton}
-        onPress={() => setShowPicker(true)}
+        onPress={() => !isGenerating && setShowPicker(true)}
+        disabled={isGenerating}
       >
         <Text style={styles.timeLabelText}>Set Time:</Text>
         <Text style={styles.timeValueText}>
@@ -141,8 +139,19 @@ export default function AddAlarmScreen() {
         />
       )}
 
-      <TouchableOpacity style={styles.button} onPress={handleSaveAlarm}>
-        <Text style={styles.buttonText}>Save Alarm</Text>
+      <TouchableOpacity
+        style={[styles.button, isGenerating && styles.disabledButton]}
+        onPress={handleSaveAlarm}
+        disabled={isGenerating}
+      >
+        {isGenerating ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator color="#ffffff" style={{ marginRight: 10 }} />
+            <Text style={styles.buttonText}>Writing AI Script...</Text>
+          </View>
+        ) : (
+          <Text style={styles.buttonText}>Save Alarm</Text>
+        )}
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -188,5 +197,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
   },
+  disabledButton: {
+    backgroundColor: '#a0c4ff',
+  },
   buttonText: { color: '#ffffff', fontSize: 18, fontWeight: 'bold' },
+  loadingContainer: { flexDirection: 'row', alignItems: 'center' },
 });

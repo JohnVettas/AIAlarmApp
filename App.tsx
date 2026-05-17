@@ -11,11 +11,14 @@ import RingingOverlay from './src/views/RingingOverlay';
 const Stack = createNativeStackNavigator();
 const STORAGE_KEY = '@ai_alarms_list';
 
+interface ActiveAlarmState {
+  id: string;
+  title: string;
+  script: string;
+}
+
 function App(): React.JSX.Element {
-  const [activeAlarm, setActiveAlarm] = useState<{
-    id: string;
-    title: string;
-  } | null>(null);
+  const [activeAlarm, setActiveAlarm] = useState<ActiveAlarmState | null>(null);
 
   useEffect(() => {
     const checkAlarms = async () => {
@@ -37,6 +40,7 @@ function App(): React.JSX.Element {
           setActiveAlarm({
             id: triggeredAlarm.id,
             title: triggeredAlarm.title,
+            script: triggeredAlarm.script || 'Good morning! Time to wake up.',
           });
         }
       } catch (error) {
@@ -83,6 +87,7 @@ function App(): React.JSX.Element {
         <RingingOverlay
           alarmId={activeAlarm.id}
           alarmTitle={activeAlarm.title}
+          alarmScript={activeAlarm.script}
           onDiscard={() => setActiveAlarm(null)}
         />
       )}
