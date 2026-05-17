@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -7,11 +7,12 @@ import {
   TouchableOpacity,
   Alert,
   Switch,
+  DeviceEventEmitter,
   SafeAreaView,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import notifee from '@notifee/react-native';
+import RNAlarmModule from 'react-native-alarmageddon';
 
 export interface AlarmItem {
   id: string;
@@ -41,8 +42,30 @@ export default function HomeScreen() {
     }, []),
   );
 
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener(
+      'refreshAlarms',
+      async () => {
+        try {
+          const stored = await AsyncStorage.getItem(STORAGE_KEY);
+          if (stored) setAlarms(JSON.parse(stored)); // Instantly updates the visual toggle!
+        } catch (error) {
+          console.error('Failed to refresh alarms from broadcast', error);
+        }
+      },
+    );
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   const deleteAlarm = async (id: string) => {
-    await notifee.cancelNotification(id);
+    try {
+      RNAlarmModule.cancelAlarm(id);
+    } catch (error) {
+      console.log('Failed to cancel native alarm', error);
+    }
 
     const updatedAlarms = alarms.filter(alarm => alarm.id !== id);
     setAlarms(updatedAlarms);
@@ -51,7 +74,11 @@ export default function HomeScreen() {
 
   const toggleAlarm = async (id: string, currentlyActive: boolean) => {
     if (currentlyActive) {
-      await notifee.cancelNotification(id);
+      try {
+        RNAlarmModule.cancelAlarm(id);
+      } catch (error) {
+        console.log('Failed to cancel native alarm', error);
+      }
     } else {
       Alert.alert(
         'Notice',

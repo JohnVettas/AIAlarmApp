@@ -6,17 +6,18 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Modal,
+  DeviceEventEmitter,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RNAlarmModule from 'react-native-alarmageddon';
-import Tts from 'react-native-tts'; 
+import Tts from 'react-native-tts';
 
 const STORAGE_KEY = '@ai_alarms_list';
 
 interface Props {
   alarmId: string;
   alarmTitle: string;
-  alarmScript: string; 
+  alarmScript: string;
   onDiscard: () => void;
 }
 
@@ -59,7 +60,7 @@ export default function RingingOverlay({
           if (isRinging.current) {
             loopTimeoutRef.current = setTimeout(() => {
               if (isRinging.current) Tts.speak(textToRead);
-            }, 2000);
+            }, 4000);
           }
         });
 
@@ -75,7 +76,7 @@ export default function RingingOverlay({
       clearInterval(timer);
       if (loopTimeoutRef.current) clearTimeout(loopTimeoutRef.current);
       Tts.removeAllListeners('tts-finish');
-      Tts.stop(); 
+      Tts.stop();
     };
   }, [alarmId, alarmScript]);
 
@@ -97,7 +98,7 @@ export default function RingingOverlay({
     } catch (e) {
       console.error('Failed to update storage', e);
     }
-
+    DeviceEventEmitter.emit('refreshAlarms');
     onDiscard();
   };
 
